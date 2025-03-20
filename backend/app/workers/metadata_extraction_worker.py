@@ -3,17 +3,13 @@ import aio_pika
 import json
 import os
 import cv2
-import numpy as np
 import subprocess
 import time
+from typing import Dict, Any
 import logging
 from datetime import datetime
-from typing import Dict, Any
 
-from ..config import (
-    PROCESSED_DIR, THUMBNAILS_DIR, RABBITMQ_URL, 
-    PROCESSING_TIMEOUT, MAX_PROCESSING_ATTEMPTS
-)
+from ..config import METADATA_DIR, RABBITMQ_URL, PROCESSING_TIMEOUT
 from ..utils.validators import check_ffprobe_availability, validate_video_file
 
 # Configure logging
@@ -21,9 +17,9 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger('video_enhancement_worker')
+logger = logging.getLogger('metadata_extraction_worker')
 
-class VideoEnhancementWorker:
+class MetadataExtractionWorker:
     def __init__(self, rabbitmq_url: str = RABBITMQ_URL):
         self.rabbitmq_url = rabbitmq_url
         self.connection = None
@@ -31,18 +27,16 @@ class VideoEnhancementWorker:
         self.queue = None
         self.task_exchange = None
         self.status_exchange = None
-        self.processed_dir = PROCESSED_DIR
-        self.thumbnails_dir = THUMBNAILS_DIR
+        self.metadata_dir = METADATA_DIR
         self.ffprobe_available = False
-        os.makedirs(self.processed_dir, exist_ok=True)
-        os.makedirs(self.thumbnails_dir, exist_ok=True)
-        
+        os.makedirs(self.metadata_dir, exist_ok=True)
+
     async def startup(self):
         """Run startup checks and initialization"""
         # Check if ffprobe is available
         self.ffprobe_available = check_ffprobe_availability()
         if not self.ffprobe_available:
-            logger.warning("FFprobe not available - some enhancement features will be limited")
+            logger.warning("FFprobe not available - advanced metadata extraction will be limited")
 
     async def connect(self):
         """Establish connection to RabbitMQ"""
@@ -63,7 +57,7 @@ class VideoEnhancementWorker:
             
             # Bind only to the task exchange with a unique queue name
             self.queue = await self.channel.declare_queue(
-                "video_enhancement_queue",
+                "metadata_extraction_queue",
                 durable=True
             )
             await self.queue.bind(self.task_exchange)
@@ -78,110 +72,142 @@ class VideoEnhancementWorker:
             await self.connection.close()
             logger.info("RabbitMQ connection closed")
 
-    async def enhance_video(self, message: Dict[str, Any]) -> Dict[str, Any]:
-        """Enhance the video file with various techniques"""
+    async def extract_metadata(self, message: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract metadata from the video file"""
         start_time = time.time()
         try:
             file_id = message["file_id"]
             input_path = message["filepath"]
-            filename = os.path.basename(input_path)
-            base_name, extension = os.path.splitext(filename)
-            enhanced_filename = f"{base_name}_enhanced{extension}"
             output_path = os.path.join(
-                self.processed_dir,
-                enhanced_filename
+                self.metadata_dir,
+                f"{file_id}_metadata.json"
             )
-            thumbnail_path = os.path.join(
-                self.thumbnails_dir,
-                f"{file_id}_thumbnail.jpg"
-            )
-            
+
             # Validate the video file
             is_valid, error_message = validate_video_file(input_path)
             if not is_valid:
                 raise ValueError(f"Invalid video file: {error_message}")
-            
-            # Update progress
-            await self.update_status(file_id, "processing", 10)
-            
-            # Apply enhancement using OpenCV
+
+            # Open video file
             cap = cv2.VideoCapture(input_path)
             if not cap.isOpened():
                 raise Exception("Failed to open video file")
-            
-            # Get video properties
+
+            # Extract basic video properties
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)
+            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            duration = frame_count / fps if fps > 0 else 0
             
-            # Create video writer
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use MP4V codec
-            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-            
-            if not out.isOpened():
-                raise Exception("Failed to create output video file")
-            
-            # Process frame by frame
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            processed_frames = 0
-            saved_thumbnail = False
-            
-            while True:
-                # Check for timeout
-                if time.time() - start_time > PROCESSING_TIMEOUT:
-                    raise TimeoutError("Video enhancement timed out")
-                
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                
-                # Apply enhancement to the frame
-                enhanced_frame = self.enhance_frame(frame)
-                
-                # Write the frame to output video
-                out.write(enhanced_frame)
-                
-                # Save thumbnail from first enhanced frame
-                if not saved_thumbnail:
-                    cv2.imwrite(thumbnail_path, enhanced_frame)
-                    saved_thumbnail = True
-                
-                # Update progress every 10% of frames
-                processed_frames += 1
-                if processed_frames % max(1, int(total_frames / 10)) == 0:
-                    progress = min(90, int(processed_frames / total_frames * 90))
-                    await self.update_status(file_id, "processing", progress)
-            
-            # Release video objects
-            cap.release()
-            out.release()
+            metadata = {
+                "file_id": file_id,
+                "filename": os.path.basename(input_path),
+                "format": os.path.splitext(input_path)[1][1:],
+                "resolution": {
+                    "width": width,
+                    "height": height
+                },
+                "fps": fps,
+                "frame_count": frame_count,
+                "duration_seconds": int(duration)
+            }
             
             # Update progress
-            await self.update_status(file_id, "processing", 95)
+            await self.update_status(file_id, "processing", 30)
             
-            # Generate thumbnail if not already saved
-            if not saved_thumbnail and os.path.exists(output_path):
+            # Check processing timeout
+            if time.time() - start_time > PROCESSING_TIMEOUT:
+                raise TimeoutError("Metadata extraction timed out")
+            
+            # Additional metadata using ffprobe (if available)
+            if self.ffprobe_available:
                 try:
-                    cap = cv2.VideoCapture(output_path)
-                    ret, frame = cap.read()
-                    if ret:
-                        cv2.imwrite(thumbnail_path, frame)
-                    cap.release()
+                    cmd = [
+                        "ffprobe",
+                        "-v", "quiet",
+                        "-print_format", "json",
+                        "-show_format",
+                        "-show_streams",
+                        input_path
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                    if result.returncode == 0:
+                        ffprobe_data = json.loads(result.stdout)
+                        metadata["advanced"] = ffprobe_data
+                        
+                        # Extract more user-friendly metadata from ffprobe output
+                        if "format" in ffprobe_data:
+                            metadata["file_size_bytes"] = int(ffprobe_data["format"].get("size", 0))
+                            metadata["bit_rate"] = ffprobe_data["format"].get("bit_rate")
+                        
+                        # Update progress
+                        await self.update_status(file_id, "processing", 70)
+                except subprocess.TimeoutExpired:
+                    logger.warning(f"ffprobe timed out for file {file_id}")
                 except Exception as e:
-                    logger.warning(f"Failed to create thumbnail: {str(e)}")
+                    logger.warning(f"Could not extract advanced metadata: {str(e)}")
+            else:
+                logger.info("Skipping ffprobe metadata extraction (not available)")
+                
+                # Get file size directly
+                try:
+                    metadata["file_size_bytes"] = os.path.getsize(input_path)
+                except Exception as e:
+                    logger.warning(f"Could not get file size: {str(e)}")
             
-            # Return processing result
+            # Check processing timeout again
+            if time.time() - start_time > PROCESSING_TIMEOUT:
+                raise TimeoutError("Metadata extraction timed out")
+            
+            # Calculate color histogram (sample from first frame)
+            ret, frame = cap.read()
+            if ret:
+                # Calculate color histograms (normalized)
+                histograms = {}
+                for i, color in enumerate(['b', 'g', 'r']):
+                    hist = cv2.calcHist([frame], [i], None, [256], [0, 256])
+                    hist = cv2.normalize(hist, hist).flatten().tolist()
+                    histograms[color] = hist
+                
+                # Add dominant color detection
+                pixels = frame.reshape(-1, 3)
+                
+                # Simple approach: take average color
+                average_color = pixels.mean(axis=0).astype(int).tolist()
+                metadata["color_profile"] = {
+                    "histograms": histograms,
+                    "average_color": {
+                        "b": average_color[0],
+                        "g": average_color[1],
+                        "r": average_color[2]
+                    }
+                }
+            
+            # Release resources
+            cap.release()
+            
+            # Save metadata to file
+            try:
+                with open(output_path, 'w') as f:
+                    json.dump(metadata, f, indent=2)
+            except Exception as e:
+                logger.error(f"Failed to save metadata to file: {str(e)}")
+                # Continue anyway - we'll return the metadata even if we can't save it
+            
+            # Update progress
+            await self.update_status(file_id, "processing", 100)
+            
             return {
                 "file_id": file_id,
                 "status": "completed",
                 "output_path": output_path,
-                "thumbnail_path": thumbnail_path if os.path.exists(thumbnail_path) else None,
-                "enhancement_type": "default",
+                "metadata": metadata,
                 "processed_at": datetime.utcnow().isoformat()
             }
-        
+
         except TimeoutError as e:
-            logger.error(f"Timeout enhancing video: {str(e)}")
+            logger.error(f"Timeout extracting metadata: {str(e)}")
             return {
                 "file_id": file_id if 'file_id' in locals() else "unknown",
                 "status": "failed",
@@ -189,59 +215,25 @@ class VideoEnhancementWorker:
                 "processed_at": datetime.utcnow().isoformat()
             }
         except Exception as e:
-            logger.error(f"Error enhancing video: {str(e)}")
+            logger.error(f"Error extracting metadata: {str(e)}")
             return {
                 "file_id": file_id if 'file_id' in locals() else "unknown",
                 "status": "failed",
                 "error": str(e),
                 "processed_at": datetime.utcnow().isoformat()
             }
-        finally:
-            # Clean up any remaining resources
-            try:
-                if 'cap' in locals() and cap is not None:
-                    cap.release()
-                if 'out' in locals() and out is not None:
-                    out.release()
-            except Exception as e:
-                logger.error(f"Error during cleanup: {str(e)}")
-
-    def enhance_frame(self, frame):
-        """Apply video enhancement techniques to a single frame"""
-        try:
-            # Convert to float for processing
-            frame_float = frame.astype(np.float32) / 255.0
-            
-            # Apply contrast enhancement (simple method)
-            alpha = 1.2  # Contrast control (1.0-3.0)
-            beta = 10    # Brightness control (0-100)
-            
-            # Apply contrast enhancement
-            enhanced = cv2.convertScaleAbs(frame, alpha=alpha, beta=beta)
-            
-            # Apply slight sharpening
-            kernel = np.array([[-1,-1,-1], 
-                               [-1, 9,-1],
-                               [-1,-1,-1]])
-            enhanced = cv2.filter2D(enhanced, -1, kernel)
-            
-            # Return enhanced frame
-            return enhanced
-        except Exception as e:
-            logger.error(f"Error enhancing frame: {str(e)}")
-            # Return original frame if enhancement fails
-            return frame
 
     async def update_status(self, file_id: str, status: str, progress: int = 0, error: str = None):
         """Update processing status via RabbitMQ"""
         status_message = {
-            "type": "video_enhancement_status",
+            "type": "metadata_extraction_status",
             "file_id": file_id,
             "status": status,
             "progress": progress,
             "error": error,
             "timestamp": datetime.utcnow().isoformat()
         }
+        # Publish to status exchange, not task exchange
         try:
             await self.status_exchange.publish(
                 aio_pika.Message(
@@ -271,17 +263,13 @@ class VideoEnhancementWorker:
                     raise ValueError("Message must contain 'filepath'")
                 
                 file_id = data["file_id"]
-                logger.info(f"Enhancing video: {file_id}")
-                
-                # Check if file exists
-                if not os.path.exists(data["filepath"]):
-                    raise FileNotFoundError(f"Video file not found: {data['filepath']}")
+                logger.info(f"Extracting metadata from video: {file_id}")
                 
                 # Update status to processing
                 await self.update_status(file_id, "processing", 0)
                 
-                # Process the video enhancement
-                result = await self.enhance_video(data)
+                # Extract metadata
+                result = await self.extract_metadata(data)
                 
                 # Update final status
                 if result["status"] == "completed":
@@ -329,7 +317,7 @@ class VideoEnhancementWorker:
         """Start the worker"""
         await self.startup()
         await self.connect()
-        logger.info("Video Enhancement Worker started")
+        logger.info("Metadata Extraction Worker started")
         
         try:
             await self.queue.consume(self.process_message)
@@ -341,7 +329,7 @@ class VideoEnhancementWorker:
             await self.close()
 
 async def main():
-    worker = VideoEnhancementWorker()
+    worker = MetadataExtractionWorker()
     await worker.start()
 
 if __name__ == "__main__":
