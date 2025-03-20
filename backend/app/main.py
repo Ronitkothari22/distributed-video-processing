@@ -63,7 +63,7 @@ async def handle_status_message(message: aio_pika.IncomingMessage):
                 error = data.get("error")
                 
                 # Update processing state
-                processing_state.update_state(file_id, status, progress, error)
+                processing_state.update_state(file_id, status, progress, error, "video_enhancement")
                 
                 # Forward status to connected client if available
                 if file_id in processing_state.states:
@@ -73,12 +73,40 @@ async def handle_status_message(message: aio_pika.IncomingMessage):
                             await active_connections[client_id].send_json({
                                 "type": "status_update",
                                 "file_id": file_id,
+                                "process_type": "video_enhancement",
                                 "status": status,
                                 "progress": progress,
                                 "error": error,
                                 "timestamp": datetime.utcnow().isoformat()
                             })
-                            logger.info(f"Forwarded status update to client {client_id}")
+                            logger.info(f"Forwarded video enhancement status update to client {client_id}")
+                        except Exception as e:
+                            logger.error(f"Error sending status to client {client_id}: {str(e)}")
+            
+            elif data["type"] == "metadata_extraction_status":
+                file_id = data["file_id"]
+                status = data["status"]
+                progress = data.get("progress", 0)
+                error = data.get("error")
+                
+                # Update processing state
+                processing_state.update_state(file_id, status, progress, error, "metadata_extraction")
+                
+                # Forward status to connected client if available
+                if file_id in processing_state.states:
+                    client_id = processing_state.states[file_id].get("client_id")
+                    if client_id and client_id in active_connections:
+                        try:
+                            await active_connections[client_id].send_json({
+                                "type": "status_update",
+                                "file_id": file_id,
+                                "process_type": "metadata_extraction",
+                                "status": status,
+                                "progress": progress,
+                                "error": error,
+                                "timestamp": datetime.utcnow().isoformat()
+                            })
+                            logger.info(f"Forwarded metadata extraction status update to client {client_id}")
                         except Exception as e:
                             logger.error(f"Error sending status to client {client_id}: {str(e)}")
                         
