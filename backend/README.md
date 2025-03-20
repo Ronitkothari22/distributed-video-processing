@@ -182,13 +182,7 @@ Note: The Postman collection automatically saves the file_id from the upload res
 - Unique file IDs are generated using UUID
 - WebSocket connections require client identification
 
-## Next Steps
 
-1. ✅ Implement video enhancement worker
-2. ✅ Implement metadata extraction worker
-3. Add database integration for state management
-4. Implement proper authentication
-5. Add rate limiting and other security measures
 
 ## API Documentation
 
