@@ -122,9 +122,9 @@ processing_states.json
 !vite.config.ts
 !eslint.config.js
 
-# Project documentation (uncomment if you don't want to include these)
-# project_context.md
-# taskbreakdown.md
+# Project documentation (don't include these)
+project_context.md
+taskbreakdown.md
 
 # Jupyter Notebook
 .ipynb_checkpoints

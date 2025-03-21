@@ -1,0 +1,146 @@
+{
+	"info": {
+		"_postman_id": "58a67c8b-db3e-4fe2-9432-b4b6843b5bc8",
+		"name": "Distributed Video Processing API",
+		"description": "A collection for testing the distributed video processing API with both video enhancement and metadata extraction capabilities.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "WebSocket Connection",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "ws://localhost:8000/ws/test_client",
+					"protocol": "ws",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"ws",
+						"test_client"
+					]
+				},
+				"description": "Establish a WebSocket connection to receive real-time updates about video processing."
+			},
+			"response": []
+		},
+		{
+			"name": "Upload Video",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/path/to/your/video.mp4",
+							"description": "Select a video file to upload"
+						},
+						{
+							"key": "client_id",
+							"value": "test_client",
+							"type": "text",
+							"description": "Client identifier (should match WebSocket connection)"
+						}
+					]
+				},
+				"url": {
+					"raw": "http://localhost:8000/upload",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"upload"
+					]
+				},
+				"description": "Upload a video file for processing through the distributed system."
+			},
+			"response": []
+		},
+		{
+			"name": "Get Video Enhancement Status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/internal/video-enhancement-status/{{file_id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"internal",
+						"video-enhancement-status",
+						"{{file_id}}"
+					]
+				},
+				"description": "Get the current status of video enhancement for a specific file."
+			},
+			"response": []
+		},
+		{
+			"name": "Get Metadata Extraction Status",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8000/internal/metadata-extraction-status/{{file_id}}",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8000",
+					"path": [
+						"internal",
+						"metadata-extraction-status",
+						"{{file_id}}"
+					]
+				},
+				"description": "Get the current status of metadata extraction for a specific file."
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Extract and save file_id from upload response",
+					"if (pm.response.code === 200 && pm.info.requestName === \"Upload Video\") {",
+					"    const responseData = pm.response.json();",
+					"    if (responseData.file_id) {",
+					"        pm.collectionVariables.set(\"file_id\", responseData.file_id);",
+					"        console.log(\"Saved file_id: \" + responseData.file_id);",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "file_id",
+			"value": "",
+			"type": "string"
+		}
+	]
+} 
