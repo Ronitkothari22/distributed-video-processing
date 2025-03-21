@@ -1,18 +1,23 @@
-import asyncio
-import aio_pika
-import json
 import os
-import cv2
-import numpy as np
-import subprocess
 import time
 import logging
+import cv2
+import numpy as np
+import aio_pika
+import json
+import asyncio
+import subprocess
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple, Optional
+from shutil import which
 
 from ..config import (
-    PROCESSED_DIR, THUMBNAILS_DIR, RABBITMQ_URL, 
-    PROCESSING_TIMEOUT, MAX_PROCESSING_ATTEMPTS
+    RABBITMQ_URL, 
+    PROCESSING_TIMEOUT,
+    PROCESSED_DIR,
+    METADATA_DIR,
+    THUMBNAILS_DIR,
+    MAX_PROCESSING_ATTEMPTS
 )
 from ..utils.validators import check_ffprobe_availability, validate_video_file
 
@@ -81,6 +86,7 @@ class VideoEnhancementWorker:
     async def enhance_video(self, message: Dict[str, Any]) -> Dict[str, Any]:
         """Enhance the video file with various techniques"""
         start_time = time.time()
+        temp_output_path = None
         try:
             file_id = message["file_id"]
             input_path = message["filepath"]
@@ -90,6 +96,11 @@ class VideoEnhancementWorker:
             output_path = os.path.join(
                 self.processed_dir,
                 enhanced_filename
+            )
+            # Create a temporary path for intermediate output
+            temp_output_path = os.path.join(
+                self.processed_dir,
+                f"{base_name}_temp{extension}"
             )
             thumbnail_path = os.path.join(
                 self.thumbnails_dir,
@@ -114,12 +125,32 @@ class VideoEnhancementWorker:
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS)
             
-            # Create video writer
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Use MP4V codec
-            out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            # Create video writer with codec that has good browser support
+            # Try multiple codecs in order of preference
+            codec_successful = False
+            preferred_codecs = ['avc1', 'H264', 'h264', 'XVID', 'mp4v']
+            
+            for codec in preferred_codecs:
+                try:
+                    fourcc = cv2.VideoWriter_fourcc(*codec)
+                    out = cv2.VideoWriter(temp_output_path, fourcc, fps, (width, height))
+                    
+                    if out.isOpened():
+                        logger.info(f"Successfully created video writer with codec: {codec}")
+                        codec_successful = True
+                        break
+                    else:
+                        logger.warning(f"Failed to create video writer with codec: {codec}")
+                except Exception as e:
+                    logger.warning(f"Error using codec {codec}: {str(e)}")
+            
+            if not codec_successful:
+                # Fallback to default codec as last resort
+                logger.warning("All preferred codecs failed, using default codec")
+                out = cv2.VideoWriter(temp_output_path, 0, fps, (width, height))
             
             if not out.isOpened():
-                raise Exception("Failed to create output video file")
+                raise Exception("Failed to create output video file with any codec")
             
             # Process frame by frame
             total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -159,16 +190,24 @@ class VideoEnhancementWorker:
             # Update progress
             await self.update_status(file_id, "processing", 95)
             
-            # Generate thumbnail if not already saved
-            if not saved_thumbnail and os.path.exists(output_path):
+            # Post-process the video to ensure browser compatibility
+            is_converted = await self.convert_to_web_compatible(temp_output_path or output_path, output_path)
+            if not is_converted and temp_output_path:
+                # If conversion failed, but we have an OpenCV output, just use that
+                logger.warning(f"FFmpeg conversion failed, using original OpenCV output for {file_id}")
+                if os.path.exists(temp_output_path) and os.path.getsize(temp_output_path) > 0:
+                    import shutil
+                    shutil.copy2(temp_output_path, output_path)
+            
+            # Clean up temporary file
+            if temp_output_path and os.path.exists(temp_output_path):
                 try:
-                    cap = cv2.VideoCapture(output_path)
-                    ret, frame = cap.read()
-                    if ret:
-                        cv2.imwrite(thumbnail_path, frame)
-                    cap.release()
+                    os.remove(temp_output_path)
                 except Exception as e:
-                    logger.warning(f"Failed to create thumbnail: {str(e)}")
+                    logger.warning(f"Failed to remove temporary file {temp_output_path}: {e}")
+            
+            # Update to completed status
+            await self.update_status(file_id, "completed", 100)
             
             # Return processing result
             return {
@@ -339,6 +378,71 @@ class VideoEnhancementWorker:
             logger.error(f"Worker error: {str(e)}")
         finally:
             await self.close()
+
+    async def convert_to_web_compatible(self, input_path: str, output_path: str) -> bool:
+        """
+        Converts video to web-compatible format using ffmpeg.
+        Returns True if successful, False otherwise.
+        """
+        # Check if ffmpeg is available
+        if not which('ffmpeg'):
+            logger.warning("FFmpeg not found, skipping conversion to web-compatible format")
+            return False
+        
+        try:
+            # If input and output paths are the same, create a temporary file
+            using_temp = False
+            if input_path == output_path:
+                using_temp = True
+                temp_output = f"{output_path}.temp.mp4"
+            else:
+                temp_output = output_path
+            
+            # FFmpeg command to convert to web-compatible H.264
+            cmd = [
+                'ffmpeg',
+                '-i', input_path,
+                '-c:v', 'libx264',  # H.264 video codec
+                '-preset', 'fast',   # Encoding speed/quality balance
+                '-crf', '22',        # Quality (lower is better, 18-28 is reasonable)
+                '-c:a', 'aac',       # AAC audio codec
+                '-b:a', '128k',      # Audio bitrate
+                '-movflags', '+faststart',  # Optimize for web streaming
+                '-y',                # Overwrite output file if it exists
+                temp_output
+            ]
+            
+            logger.info(f"Running FFmpeg conversion: {' '.join(cmd)}")
+            
+            # Run FFmpeg
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            # If using a temp file and conversion was successful, replace the original
+            if using_temp and process.returncode == 0:
+                if os.path.exists(temp_output) and os.path.getsize(temp_output) > 0:
+                    if os.path.exists(output_path):
+                        os.remove(output_path)
+                    os.rename(temp_output, output_path)
+                else:
+                    logger.error(f"FFmpeg produced an empty or missing file: {temp_output}")
+                    return False
+            
+            if process.returncode != 0:
+                logger.error(f"FFmpeg conversion failed: {stderr.decode()}")
+                return False
+                
+            logger.info(f"Successfully converted video to web-compatible format: {output_path}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error during FFmpeg conversion: {str(e)}")
+            return False
 
 async def main():
     worker = VideoEnhancementWorker()

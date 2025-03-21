@@ -60,8 +60,13 @@ class ProcessingState:
     def create_state(self, file_id: str, client_id: str = None) -> Dict[str, Any]:
         """Create initial state for a file"""
         current_time = datetime.utcnow().isoformat()
+        
+        # Ensure client_id is never None to avoid issues with WebSocket connections
+        effective_client_id = client_id if client_id else f"unknown_client_{int(time.time())}"
+        logger.info(f"Creating state with effective client_id: {effective_client_id} (original: {client_id})")
+        
         self.states[file_id] = {
-            "client_id": client_id,
+            "client_id": effective_client_id,
             "created_at": current_time,
             "video_enhancement": {
                 "status": "pending",
