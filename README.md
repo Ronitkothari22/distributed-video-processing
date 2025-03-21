@@ -45,12 +45,23 @@ This system provides a robust, distributed architecture for video processing, fe
 └─────────────────┘ └─────────────────┘
 ```
 
+## Documentation
+
+This project includes comprehensive documentation to help you understand the system:
+
+- [Backend Technical Documentation](backend/TECHNICAL_DOCUMENTATION.md): Detailed explanation of the backend components, classes, and functions
+- [Frontend Technical Documentation](frontend/TECHNICAL_DOCUMENTATION.md): Detailed explanation of the frontend components, services, and utilities
+- [API Documentation](backend/API_DOCUMENTATION.md): Complete API reference with endpoints and examples
+- [Backend README](backend/README.md): Specific backend setup and configuration
+- [Frontend README](frontend/README.md): Specific frontend setup and configuration
+
 ## Prerequisites
 
 - Python 3.8+
 - RabbitMQ
 - OpenCV
 - FFmpeg (required for browser-compatible video processing)
+- Node.js and npm (for frontend)
 
 ## Configuration
 
@@ -101,7 +112,35 @@ See `backend/app/config.py` for all available configuration options.
 - Graceful fallback for codec availability
 - Client connection tracking and error recovery
 
-## Installation & Setup
+## Quick Start
+
+For a quick start to run the entire system with one command:
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/distributed-video-processing.git
+cd distributed-video-processing
+
+# Install backend dependencies
+pip install -r requirements.txt
+
+# Start RabbitMQ (if not already running)
+docker run -d --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:management
+
+# Start all backend services
+cd backend
+chmod +x start_services.sh
+./start_services.sh
+
+# In a new terminal, start the frontend
+cd frontend
+npm install
+npm run dev
+```
+
+Then open your browser to http://localhost:5173 to access the application.
+
+## Detailed Installation & Setup
 
 1. Clone this repository
 ```bash
@@ -109,7 +148,7 @@ git clone https://github.com/yourusername/distributed-video-processing.git
 cd distributed-video-processing
 ```
 
-2. Install dependencies
+2. Install backend dependencies
 ```bash
 pip install -r requirements.txt
 ```
@@ -149,6 +188,8 @@ npm run dev
 - `GET /processed_videos/{file_id}` - Stream processed video with range-request support
 - `GET /metadata/{file_id}.json` - Get extracted metadata
 - `WS /ws/{client_id}` - WebSocket for real-time status updates
+
+For detailed API documentation, see [API Documentation](backend/API_DOCUMENTATION.md).
 
 ## WebSocket Interface
 
@@ -217,6 +258,3 @@ The system is designed to work with all modern browsers:
 - Proper CORS headers for cross-origin resource sharing
 - Adaptive video player with fallbacks and retry logic
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
