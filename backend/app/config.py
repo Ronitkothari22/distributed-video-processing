@@ -48,7 +48,7 @@ API_HOST = os.environ.get('API_HOST', '0.0.0.0')
 API_PORT = int(os.environ.get('API_PORT', 8000))
 ALLOWED_ORIGINS = os.environ.get(
     'ALLOWED_ORIGINS',
-    'http://localhost:3000,http://localhost:8000'
+    'http://localhost:3000,http://localhost:5173,http://localhost:8000'
 ).split(',')
 DEBUG = os.environ.get('DEBUG', 'False').lower() in ('true', '1', 't')
 API_PREFIX = os.environ.get('API_PREFIX', '/api')
@@ -64,6 +64,4 @@ LOG_FORMAT = os.environ.get(
 # State file
 PROCESSING_STATES_FILE = "processing_states.json"
 
-# CORS settings
-# In production, replace "*" with specific origins
-CORS_ORIGINS = ["*"] 
+# CORS settings - Removed duplicate in favor of ALLOWED_ORIGINS above 
