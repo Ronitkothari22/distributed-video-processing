@@ -1,63 +1,119 @@
-# Distributed Video Processing - Frontend
+# Distributed Video Processing Frontend
 
-This is the frontend component of the distributed video processing pipeline. It provides a user interface for uploading videos and viewing processing status in real-time.
+A modern React application for video upload, processing, and playback with real-time status updates.
 
 ## Features
 
-- Video upload with progress tracking
-- Real-time status updates via WebSocket
-- Display of processed videos
-- Metadata visualization
-- Multi-client support
+- **Video Upload**: Upload videos with progress tracking
+- **Real-time Status Updates**: WebSocket connection for live processing updates
+- **Enhanced Video Player**: Browser-compatible video playback with advanced features
+- **Metadata Visualization**: Display extracted video metadata
+- **Responsive Design**: Works across desktop and mobile devices
 
-## Setup Instructions
+## Advanced Video Player
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
+The frontend includes a state-of-the-art video player with the following features:
 
-2. Start the development server:
-   ```bash
-   npm start
-   ```
+- **Multi-format Support**: Handles various video formats through multiple source elements
+- **Resilient Loading**: Automatic retry mechanism for intermittent connection issues
+- **Comprehensive Error Handling**: Detailed error messages for troubleshooting
+- **Video Controls**: Play/pause, volume, fullscreen, and download functionality
+- **Cross-browser Compatibility**: Works across Chrome, Firefox, Safari, and Edge
 
-3. Open [http://localhost:3000](http://localhost:3000) in your browser
+## Technologies Used
+
+- React 18
+- TypeScript
+- Material UI
+- Vite (for fast development and building)
+- WebSocket for real-time communication
+- Fetch API for HTTP requests
+
+## Installation and Setup
+
+1. Install dependencies
+```bash
+npm install
+```
+
+2. Start development server
+```bash
+npm run dev
+```
+
+3. Build for production
+```bash
+npm run build
+```
 
 ## Project Structure
 
 ```
 frontend/
 ├── src/
-│   ├── components/         # React components
-│   ├── services/          # API and WebSocket services
-│   ├── utils/            # Utility functions
-│   └── App.js            # Main application component
-├── package.json          # Node.js dependencies
-└── README.md            # This file
+│   ├── components/
+│   │   ├── upload/
+│   │   │   └── VideoUpload.tsx       # Video upload component
+│   │   ├── video/
+│   │   │   └── VideoPlayer.tsx       # Enhanced video player component
+│   │   ├── metadata/
+│   │   │   └── MetadataDisplay.tsx   # Metadata visualization
+│   │   └── common/
+│   │       └── StatusIndicator.tsx   # Processing status component
+│   ├── services/
+│   │   ├── ApiService.ts             # HTTP API calls
+│   │   └── WebSocketService.ts       # WebSocket connection 
+│   ├── utils/
+│   │   └── helpers.ts                # Utility functions
+│   ├── App.tsx                       # Main application component
+│   └── main.tsx                      # Application entry point
+├── public/                           # Static assets
+├── index.html                        # HTML template
+├── vite.config.ts                    # Vite configuration
+├── tsconfig.json                     # TypeScript configuration
+└── package.json                      # Dependencies and scripts
 ```
 
-## Components
 
-1. Video Upload
-   - File selection
-   - Upload progress
-   - Error handling
+### Comprehensive Error Handling
 
-2. Status Display
-   - Processing status
-   - Real-time updates
-   - Error notifications
+The player provides detailed error feedback:
+- Network errors (server unreachable)
+- Format errors (unsupported codec)
+- CORS errors (cross-origin issues)
+- Specific browser codec support issues
 
-3. Video Player
-   - Enhanced video playback
-   - Metadata display
-   - Download options
 
-## Development
 
-The application is built with:
-- React
-- WebSocket for real-time updates
-- Material-UI for components
-- Axios for HTTP requests 
+## Development Mode
+
+Run the application in development mode:
+
+```bash
+npm run dev
+```
+
+The application will be available at `http://localhost:5173` by default.
+
+## Building for Production
+
+Create an optimized production build:
+
+```bash
+npm run build
+```
+
+The build artifacts will be stored in the `dist/` directory.
+
+## Troubleshooting
+
+If you encounter video playback issues:
+
+1. Check the browser console for specific error messages
+2. Verify that the backend server is running
+3. Ensure the video has been fully processed
+4. Try a different browser to isolate browser-specific issues
+5. Check network tab in dev tools for HTTP status codes
+6. Verify that CORS is properly configured
+
+

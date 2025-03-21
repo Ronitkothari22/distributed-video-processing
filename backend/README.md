@@ -7,14 +7,17 @@ This is the backend service for the distributed video processing pipeline. It ha
 - Video upload and storage
 - Real-time status updates via WebSocket
 - Task distribution via RabbitMQ
-- Video enhancement processing
+- Video enhancement processing with multi-codec support
 - Metadata extraction
+- HTTP range request support for efficient video streaming
+- Browser-compatible video processing with FFmpeg
 
 ## Prerequisites
 
 - Python 3.11+
 - RabbitMQ server
 - OpenCV (for video processing)
+- FFmpeg (required for browser compatibility)
 
 ## Installation
 
@@ -93,6 +96,37 @@ pytest tests/ -v
 - `GET /internal/metadata-extraction-status/{file_id}` - Get metadata extraction status
   - Returns: Current status and progress
 
+- `GET /processed_videos/{file_id}` - Stream processed video
+  - Supports HTTP range requests for efficient streaming
+  - Returns: Video file with proper MIME type and CORS headers
+
+- `GET /metadata/{file_id}.json` - Get extracted metadata
+  - Returns: JSON metadata with CORS headers
+
+## Enhanced Video Processing
+
+The system now includes advanced video processing capabilities:
+
+1. **Multi-Codec Support**: The video enhancement worker attempts to use multiple codecs in order of browser compatibility:
+   - H.264 (avc1) - Highest browser compatibility
+   - XVID - Fallback option
+   - Other codecs as fallbacks
+
+2. **FFmpeg Post-Processing**: After OpenCV processing, FFmpeg converts the video to ensure web browser compatibility:
+   - H.264 video codec with optimized settings
+   - AAC audio codec for audio tracks
+   - Optimized for web streaming with `faststart` flag
+
+3. **Efficient Video Streaming**:
+   - HTTP range requests support in the API for partial content loading
+   - Proper content type headers for different video formats
+   - Cache-control headers for improved performance
+
+4. **Error Handling and Recovery**:
+   - Graceful fallbacks when preferred codecs are unavailable
+   - Detailed logging of video processing steps
+   - Temporary file handling to prevent data loss
+
 ## Project Structure
 
 ```
@@ -136,6 +170,7 @@ backend/
 2. The Video Enhancement Worker processes videos and reports status back
 3. Real-time updates are sent to connected clients via WebSocket
 4. All processing status is tracked in the state management system
+5. Processed videos are served with HTTP range support for efficient streaming
 
 ## Testing with Postman
 
@@ -158,6 +193,10 @@ backend/
    - GET `http://localhost:8000/internal/video-enhancement-status/{file_id}`
    - GET `http://localhost:8000/internal/metadata-extraction-status/{file_id}`
 
+5. Test video streaming:
+   - GET `http://localhost:8000/processed_videos/{file_id}`
+   - Use the "Send and Download" option in Postman to test video download
+
 Note: The Postman collection automatically saves the file_id from the upload response as a collection variable, making it easier to check statuses.
 
 ## Error Handling
@@ -166,6 +205,25 @@ Note: The Postman collection automatically saves the file_id from the upload res
 - Failed processing attempts are reported via status endpoints
 - WebSocket connections are automatically cleaned up
 - RabbitMQ connection issues are handled gracefully
+- Video codec compatibility issues are handled with fallback options
+- HTTP range request parsing errors are handled with appropriate status codes
+
+## Browser Compatibility
+
+The system is designed to ensure maximum browser compatibility:
+
+1. **Video Format Conversion**:
+   - Videos are processed to use H.264/AAC, supported by all modern browsers
+   - Multiple fallback codecs are attempted if the primary codec fails
+
+2. **Streaming Support**:
+   - Proper implementation of HTTP range requests for efficient streaming
+   - Appropriate MIME types for different video formats
+   - Cache-control headers to improve playback performance
+
+3. **CORS Support**:
+   - All API endpoints include appropriate CORS headers
+   - The WebSocket server accepts connections from allowed origins
 
 ## Contributing
 
@@ -181,8 +239,6 @@ Note: The Postman collection automatically saves the file_id from the upload res
 - File uploads are validated for content type
 - Unique file IDs are generated using UUID
 - WebSocket connections require client identification
-
-
 
 ## API Documentation
 
@@ -223,8 +279,3 @@ Several scripts are provided to help with documentation:
 ./update_metadata_docs.py
 ```
 
-### Postman Collection
-
-A Postman collection is provided for testing the API:
-- File: `Video_Processing_API.postman_collection.json`
-- Import this into Postman to quickly test all endpoints 

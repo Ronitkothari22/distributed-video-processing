@@ -11,6 +11,7 @@ This system provides a robust, distributed architecture for video processing, fe
 - **Metadata Extraction Worker**: Extracts metadata from videos
 - **RabbitMQ**: Used for message passing between components
 - **State Management**: Tracks processing status with file locking
+- **Browser-Compatible Video Processing**: Ensures videos are playable across modern browsers
 
 ## System Architecture
 
@@ -49,7 +50,7 @@ This system provides a robust, distributed architecture for video processing, fe
 - Python 3.8+
 - RabbitMQ
 - OpenCV
-- FFmpeg (optional, for advanced features)
+- FFmpeg (required for browser-compatible video processing)
 
 ## Configuration
 
@@ -72,11 +73,24 @@ See `backend/app/config.py` for all available configuration options.
 - Sharpening
 - Thumbnail generation
 - Format validation
+- Browser-compatible codec conversion (H.264/AAC)
+- Adaptive multi-codec processing pipeline
 
 ### Metadata Extraction
 - Video properties (resolution, fps, duration)
 - Color histogram analysis
 - Advanced metadata with FFprobe (if available)
+
+### Media Streaming Capabilities
+- HTTP range requests support for efficient video streaming
+- Proper MIME type handling for various formats
+- Cross-origin resource sharing headers for better integration
+
+### Frontend Video Player
+- Resilient video loading with retry mechanism
+- Multi-format source specification for browser compatibility
+- Comprehensive error handling and user feedback
+- Advanced video controls (play/pause, fullscreen, download)
 
 ### Reliability Features
 - File locking for state management
@@ -84,6 +98,8 @@ See `backend/app/config.py` for all available configuration options.
 - FFprobe availability check
 - Video format validation
 - Processing timeouts
+- Graceful fallback for codec availability
+- Client connection tracking and error recovery
 
 ## Installation & Setup
 
@@ -118,22 +134,28 @@ python -m app.workers.video_enhancement_worker
 python -m app.workers.metadata_extraction_worker
 ```
 
+6. Start the frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
 ## API Endpoints
 
-- `POST /api/videos/upload` - Upload a new video
-- `GET /api/videos/{video_id}` - Get video details
-- `GET /api/videos/{video_id}/status` - Get processing status
-- `GET /api/videos/{video_id}/metadata` - Get extracted metadata
-- `GET /api/videos/{video_id}/thumbnail` - Get video thumbnail
-- `GET /api/videos/{video_id}/download` - Download processed video
-- `WS /ws/status` - WebSocket for real-time status updates
+- `POST /upload` - Upload a new video
+- `GET /internal/video-enhancement-status/{file_id}` - Get video enhancement status
+- `GET /internal/metadata-extraction-status/{file_id}` - Get metadata extraction status
+- `GET /processed_videos/{file_id}` - Stream processed video with range-request support
+- `GET /metadata/{file_id}.json` - Get extracted metadata
+- `WS /ws/{client_id}` - WebSocket for real-time status updates
 
 ## WebSocket Interface
 
 Connect to the WebSocket server to receive real-time status updates:
 
 ```javascript
-const ws = new WebSocket("ws://localhost:8000/ws/status");
+const ws = new WebSocket(`ws://localhost:8000/ws/${clientId}`);
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
   console.log("Processing status:", data);
@@ -149,16 +171,26 @@ backend/
   ├── app/
   │   ├── config.py            # Configuration settings
   │   ├── main.py              # FastAPI application
-  │   ├── api/                 # API routes
-  │   ├── models/              # Data models
-  │   ├── services/            # Business logic
   │   ├── utils/               # Utility functions
   │   │   ├── rabbitmq.py      # RabbitMQ client
   │   │   ├── state.py         # State management
   │   │   └── validators.py    # Input validation
   │   └── workers/             # Background workers
+  │       ├── video_enhancement_worker.py  # Video processing
+  │       └── metadata_extraction_worker.py # Metadata extraction
   ├── tests/                   # Test files
-  └── alembic/                 # Database migrations
+  └── processed_videos/        # Output directory for processed files
+      └── metadata/            # Output directory for metadata
+
+frontend/
+  ├── src/
+  │   ├── components/          # React components
+  │   │   ├── upload/          # Upload components
+  │   │   ├── video/           # Video player components
+  │   │   └── metadata/        # Metadata display components
+  │   ├── services/            # API services
+  │   └── utils/               # Utility functions
+  └── public/                  # Static assets
 ```
 
 ## Error Handling
@@ -171,6 +203,19 @@ The system has been designed with comprehensive error handling:
 - Connection recovery
 - File locking for concurrent access
 - FFprobe availability checks
+- Codec compatibility detection
+- Video player error recovery with retry mechanisms
+- Detailed error reporting in UI
+
+## Browser Compatibility
+
+The system is designed to work with all modern browsers:
+
+- Videos are processed with browser-compatible H.264/AAC codecs
+- HTTP range requests enable efficient video streaming
+- Multi-format source definitions ensure maximum compatibility
+- Proper CORS headers for cross-origin resource sharing
+- Adaptive video player with fallbacks and retry logic
 
 ## Contributing
 
