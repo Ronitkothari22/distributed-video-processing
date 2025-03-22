@@ -44,6 +44,28 @@ This system provides a robust, distributed architecture for video processing, fe
 │     Worker      │ │     Worker      │
 └─────────────────┘ └─────────────────┘
 ```
+## Technology Stack
+
+### Backend
+- **FastAPI**: Modern, high-performance web framework for building APIs
+- **Uvicorn**: ASGI server for running FastAPI applications
+- **Python 3.8+**: Core programming language
+- **RabbitMQ**: Message broker for distributed task processing
+- **OpenCV**: Computer vision library for video processing
+- **FFmpeg**: Multimedia framework for video conversion and analysis
+- **Pydantic**: Data validation and settings management
+- **Python-Multipart**: For handling file uploads
+- **AIO-Pika**: Asynchronous RabbitMQ client
+
+### Frontend
+- **React 18**: JavaScript library for building user interfaces
+- **TypeScript**: Typed JavaScript for better developer experience
+- **Vite**: Next generation frontend tooling for faster development
+- **Material UI 5**: React UI framework for modern design
+- **Axios**: Promise-based HTTP client for API requests
+- **Emotion**: CSS-in-JS library for component styling
+- **WebSockets**: For real-time communication with the server
+
 
 ## Documentation
 
